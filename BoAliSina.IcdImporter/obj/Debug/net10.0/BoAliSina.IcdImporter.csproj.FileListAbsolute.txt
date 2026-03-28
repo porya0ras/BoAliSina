@@ -28,3 +28,5 @@
 /home/haleh/Documents/My Projects/BoAliSina/BoAliSina.IcdImporter/obj/Debug/net10.0/BoAliSina.IcdImporter.pdb
 /home/haleh/Documents/My Projects/BoAliSina/BoAliSina.IcdImporter/obj/Debug/net10.0/BoAliSina.IcdImporter.genruntimeconfig.cache
 /home/haleh/Documents/My Projects/BoAliSina/BoAliSina.IcdImporter/obj/Debug/net10.0/ref/BoAliSina.IcdImporter.dll
+/home/haleh/Documents/My Projects/BoAliSina/BoAliSina.IcdImporter/obj/Debug/net10.0/BoAliSina.IcdImporter.sourcelink.json
+/home/haleh/Documents/My Projects/BoAliSina/BoAliSina.IcdImporter/bin/Debug/net10.0/Spectre.Console.dll

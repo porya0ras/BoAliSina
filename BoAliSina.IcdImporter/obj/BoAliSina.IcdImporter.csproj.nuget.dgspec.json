@@ -56,6 +56,10 @@
             "Neo4j.Driver": {
               "target": "Package",
               "version": "[6.0.0, )"
+            },
+            "Spectre.Console": {
+              "target": "Package",
+              "version": "[0.54.0, )"
             }
           },
           "imports": [

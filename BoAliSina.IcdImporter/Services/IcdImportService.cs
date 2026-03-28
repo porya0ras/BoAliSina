@@ -15,7 +15,7 @@ public class IcdImportService
         _repository = repository;
     }
 
-    public async Task ImportConceptHierarchyAsync(string rootUri)
+    public async Task ImportConceptHierarchyAsync(string rootUri, Action<double, int, int>? onProgress = null)
     {
         var visited = new HashSet<string>();
         var queue = new Queue<string>();
@@ -50,6 +50,8 @@ public class IcdImportService
             if (currentBatch.Any())
             {
                 await SaveBatchToGraphAsync(currentBatch);
+                double progress = (double)visited.Count / (visited.Count + queue.Count) * 100;
+                onProgress?.Invoke(progress, visited.Count, queue.Count);
             }
         }
     }

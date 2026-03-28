@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("BoAliSina.IcdImporter")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+97f7d722f2e8f1ead604cdc30039f1abcb0c832e")]
 [assembly: System.Reflection.AssemblyProductAttribute("BoAliSina.IcdImporter")]
 [assembly: System.Reflection.AssemblyTitleAttribute("BoAliSina.IcdImporter")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

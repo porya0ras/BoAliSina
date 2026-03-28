@@ -10,7 +10,8 @@
         "dependencies": {
           "Microsoft.Extensions.DependencyInjection": "10.0.5",
           "Microsoft.Extensions.Http": "10.0.5",
-          "Neo4j.Driver": "6.0.0"
+          "Neo4j.Driver": "6.0.0",
+          "Spectre.Console": "0.54.0"
         },
         "runtime": {
           "BoAliSina.IcdImporter.dll": {}
@@ -177,6 +178,14 @@
             "fileVersion": "6.0.0.0"
           }
         }
+      },
+      "Spectre.Console/0.54.0": {
+        "runtime": {
+          "lib/net10.0/Spectre.Console.dll": {
+            "assemblyVersion": "0.0.0.0",
+            "fileVersion": "0.54.0.0"
+          }
+        }
       }
     }
   },
@@ -283,6 +292,13 @@
       "sha512": "sha512-ejoXojkPz9qf4lSpFm3JACKHd8oQLWrQGYGC/dnHAcEqe76NIL/PbjLCbQq3dsDEAdUH/CuVe7wl0E5JuY3H2g==",
       "path": "neo4j.driver/6.0.0",
       "hashPath": "neo4j.driver.6.0.0.nupkg.sha512"
+    },
+    "Spectre.Console/0.54.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-StDXCFayfy0yB1xzUHT2tgEpV1/HFTiS4JgsAQS49EYTfMixSwwucaQs/bIOCwXjWwIQTMuxjUIxcB5XsJkFJA==",
+      "path": "spectre.console/0.54.0",
+      "hashPath": "spectre.console.0.54.0.nupkg.sha512"
     }
   }
 }

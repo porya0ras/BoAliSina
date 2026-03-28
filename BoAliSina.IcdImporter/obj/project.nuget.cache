@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "dgSpecHash": "d25EIWOsv0c=",
+  "dgSpecHash": "vrWlj4qA/10=",
   "success": true,
   "projectFilePath": "/home/haleh/Documents/My Projects/BoAliSina/BoAliSina.IcdImporter/BoAliSina.IcdImporter.csproj",
   "expectedPackageFiles": [
@@ -17,7 +17,8 @@
     "/home/haleh/.nuget/packages/microsoft.extensions.options/10.0.5/microsoft.extensions.options.10.0.5.nupkg.sha512",
     "/home/haleh/.nuget/packages/microsoft.extensions.options.configurationextensions/10.0.5/microsoft.extensions.options.configurationextensions.10.0.5.nupkg.sha512",
     "/home/haleh/.nuget/packages/microsoft.extensions.primitives/10.0.5/microsoft.extensions.primitives.10.0.5.nupkg.sha512",
-    "/home/haleh/.nuget/packages/neo4j.driver/6.0.0/neo4j.driver.6.0.0.nupkg.sha512"
+    "/home/haleh/.nuget/packages/neo4j.driver/6.0.0/neo4j.driver.6.0.0.nupkg.sha512",
+    "/home/haleh/.nuget/packages/spectre.console/0.54.0/spectre.console.0.54.0.nupkg.sha512"
   ],
   "logs": []
 }
