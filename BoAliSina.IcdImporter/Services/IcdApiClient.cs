@@ -22,6 +22,7 @@ public class IcdApiClient : IIcdApiClient
         _httpClient = httpClient;
         _clientId = clientId;
         _clientSecret = clientSecret;
+        _httpClient.Timeout = TimeSpan.FromSeconds(30); // Prevent indefinite hang
         _httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
         _httpClient.DefaultRequestHeaders.Add("API-Version", "v2");
         _httpClient.DefaultRequestHeaders.Add("Accept-Language", "en");

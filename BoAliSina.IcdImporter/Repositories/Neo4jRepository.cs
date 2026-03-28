@@ -32,24 +32,39 @@ public class Neo4jRepository(string uri, string user, string password) : INeo4jR
     {
         await using var session = _driver.AsyncSession();
         const string query = @"
-            MERGE (d:Disease {id: $disease.Id})
-            SET d.icdCode = $disease.IcdCode,
-                d.title = $disease.Title,
-                d.description = $disease.Description,
-                d.source = $disease.Source,
+            MERGE (d:Disease {id: $id})
+            SET d.icdCode = $icdCode,
+                d.title = $title,
+                d.description = $description,
+                d.source = $source,
                 d.updatedAt = datetime()
             
             WITH d
             UNWIND $symptoms AS sym
-            MERGE (s:Symptom {normalizedName: sym.NormalizedName})
-            SET s.displayName = sym.DisplayName,
-                s.source = sym.Source
+            MERGE (s:Symptom {normalizedName: sym.normalizedName})
+            SET s.displayName = sym.displayName,
+                s.source = sym.source
             MERGE (d)-[:HAS_SYMPTOM]->(s)";
-        
-        await session.ExecuteWriteAsync(tx => tx.RunAsync(query, new { 
-            disease, 
-            symptoms = symptoms.Select(s => new { s.NormalizedName, s.DisplayName, s.Source }).ToArray() 
-        }));
+
+        var parameters = new Dictionary<string, object?>
+        {
+            ["id"] = disease.Id,
+            ["icdCode"] = disease.IcdCode,
+            ["title"] = disease.Title,
+            ["description"] = disease.Description,
+            ["source"] = disease.Source,
+            ["symptoms"] = symptoms.Select(s => new Dictionary<string, object>
+            {
+                ["normalizedName"] = s.NormalizedName,
+                ["displayName"] = s.DisplayName,
+                ["source"] = s.Source
+            }).ToList()
+        };
+
+        await session.ExecuteWriteAsync(async tx => 
+        {
+            await tx.RunAsync(query, parameters);
+        });
     }
 
     public async Task<IEnumerable<DiseaseSearchResult>> SearchDiseasesBySymptomsAsync(IEnumerable<string> symptoms)

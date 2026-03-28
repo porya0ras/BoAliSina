@@ -90,11 +90,19 @@ static async Task RunImportAsync(IServiceProvider sp, string rootUri)
         {
             var task = ctx.AddTask("[green]Ingesting Medical Knowledge...[/]");
             
-            await importer.ImportConceptHierarchyAsync(rootUri, (progress, total, queue) => 
+            try
             {
-                task.Value = progress;
-                task.Description = $"[green]Processed:[/] {total} diseases/symptoms (Queue: {queue})";
-            });
+                await importer.ImportConceptHierarchyAsync(rootUri, (progress, total, queue) => 
+                {
+                    task.Value = progress;
+                    task.Description = $"[green]Processed:[/] {total} diseases/symptoms (Queue: {queue})";
+                });
+            }
+            catch (Exception ex)
+            {
+                AnsiConsole.WriteException(ex);
+                AnsiConsole.MarkupLine("[red]Ingestion failed with an unexpected error.[/]");
+            }
 
             task.Value = 100;
             task.StopTask();

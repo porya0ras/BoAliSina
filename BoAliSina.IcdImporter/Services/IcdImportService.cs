@@ -1,3 +1,6 @@
+using System.Collections.Concurrent;
+using System.Threading;
+using System.Threading.Tasks;
 using BoAliSina.IcdImporter.Models.Api;
 using BoAliSina.IcdImporter.Models.Graph;
 using BoAliSina.IcdImporter.Repositories;
@@ -23,41 +26,80 @@ public class IcdImportService
     public async Task ImportConceptHierarchyAsync(string rootUri, Action<double, int, int>? onProgress = null)
     {
         var visited = new HashSet<string>();
-        var queue = new Queue<string>();
+        var enqueued = new HashSet<string> { rootUri };
+        var queue = new ConcurrentQueue<string>();
         queue.Enqueue(rootUri);
 
-            DateTime lastProgressUpdate = DateTime.MinValue;
+        var lastProgressUpdate = DateTime.MinValue;
+        var semaphore = new SemaphoreSlim(10); // Faster parallelism
+        var tasks = new ConcurrentBag<Task>();
 
-            while (queue.Count > 0)
+        while (!queue.IsEmpty || tasks.Any(t => !t.IsCompleted))
+        {
+            if (queue.TryDequeue(out var uri))
             {
-                var uri = queue.Dequeue();
-                if (visited.Contains(uri)) continue;
-
-                var dto = await _apiClient.GetConceptAsync(uri);
-                if (dto != null)
+                await semaphore.WaitAsync();
+                var task = Task.Run(async () =>
                 {
-                    await ProcessConceptAsync(dto);
-                    visited.Add(uri);
-
-                    if (dto.Child != null)
+                    try
                     {
-                        foreach (var child in dto.Child)
+                        var dto = await _apiClient.GetConceptAsync(uri);
+                        if (dto != null)
                         {
-                            if (!visited.Contains(child)) queue.Enqueue(child);
+                            await ProcessConceptAsync(dto);
+                            lock (visited) { visited.Add(uri); }
+
+                            if (dto.Child != null)
+                            {
+                                foreach (var child in dto.Child)
+                                {
+                                    lock (enqueued)
+                                    {
+                                        if (enqueued.Add(child)) queue.Enqueue(child);
+                                    }
+                                }
+                            }
                         }
                     }
-                }
-
-                if (DateTime.UtcNow - lastProgressUpdate > TimeSpan.FromMilliseconds(200))
-                {
-                    double progress = visited.Count / (double)(visited.Count + queue.Count) * 100;
-                    onProgress?.Invoke(progress, visited.Count, queue.Count);
-                    lastProgressUpdate = DateTime.UtcNow;
-                }
+                    catch (Exception)
+                    {
+                        // Log locally or handle if necessary
+                    }
+                    finally
+                    {
+                        semaphore.Release();
+                    }
+                });
+                tasks.Add(task);
+            }
+            else
+            {
+                await Task.Delay(50);
             }
 
-            // Final progress update
-            onProgress?.Invoke(100, visited.Count, 0);
+            // Cleanup periodically to avoid memory overhead of finished tasks
+            if (tasks.Count > 200)
+            {
+                var remaining = tasks.Where(t => !t.IsCompleted).ToList();
+                tasks = new ConcurrentBag<Task>(remaining);
+            }
+
+            if (DateTime.UtcNow - lastProgressUpdate > TimeSpan.FromMilliseconds(200))
+            {
+                int visitedCount, queueCount;
+                lock (visited) { visitedCount = visited.Count; }
+                queueCount = queue.Count;
+
+                int totalCount = visitedCount + queueCount;
+                double progress = totalCount > 0 ? (visitedCount / (double)totalCount) * 100 : 0;
+                
+                onProgress?.Invoke(progress, visitedCount, queueCount);
+                lastProgressUpdate = DateTime.UtcNow;
+            }
+        }
+        
+        await Task.WhenAll(tasks);
+        onProgress?.Invoke(100, visited.Count, 0);
     }
 
     private async Task ProcessConceptAsync(IcdApiConceptDto dto)
