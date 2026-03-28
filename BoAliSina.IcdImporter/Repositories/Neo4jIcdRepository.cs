@@ -10,6 +10,7 @@ public interface IIcdGraphRepository : IAsyncDisposable
     Task MergeRelationshipsBatchAsync(IEnumerable<IcdRelationship> relationships);
     Task MergeSideEffectsBatchAsync(IEnumerable<SideEffectNode> nodes);
     Task LinkSideEffectsBatchAsync(IEnumerable<SideEffectRelationship> relationships);
+    Task ClearDatabaseAsync();
 }
 
 public class Neo4jIcdRepository : IIcdGraphRepository
@@ -94,6 +95,13 @@ public class Neo4jIcdRepository : IIcdGraphRepository
             await tx.RunAsync(query, new { batch = relationships.Select(r => new { 
                 r.ConceptUri, r.SideEffectName 
             }) }));
+    }
+
+    public async Task ClearDatabaseAsync()
+    {
+        await using var session = _driver.AsyncSession();
+        await session.ExecuteWriteAsync(async tx =>
+            await tx.RunAsync("MATCH (n) DETACH DELETE n"));
     }
 
     public async ValueTask DisposeAsync() => await _driver.DisposeAsync();

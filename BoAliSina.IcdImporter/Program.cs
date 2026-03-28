@@ -42,6 +42,7 @@ while (!exit)
             .AddChoices(new[] {
                 "Run Full Import",
                 "Add Sample Side Effects",
+                "Clear All Data [red](Destructive)[/]",
                 "Exit"
             }));
 
@@ -52,6 +53,9 @@ while (!exit)
             break;
         case "Add Sample Side Effects":
             await AddSampleDataAsync(serviceProvider, rootIcdUri);
+            break;
+        case "Clear All Data [red](Destructive)[/]":
+            await ClearDatabaseAsync(serviceProvider);
             break;
         case "Exit":
             exit = true;
@@ -122,6 +126,26 @@ static async Task AddSampleDataAsync(IServiceProvider sp, string rootUri)
         });
 
     AnsiConsole.MarkupLine("[bold blue]i[/] Side Effect demo data added.");
+}
+
+static async Task ClearDatabaseAsync(IServiceProvider sp)
+{
+    if (!AnsiConsole.Confirm("[red]Are you sure you want to delete ALL data from the database?[/]", false))
+    {
+        return;
+    }
+
+    await AnsiConsole.Status()
+        .StartAsync("Clearing Database...", async ctx => 
+        {
+            var repository = sp.GetRequiredService<IIcdGraphRepository>();
+            await repository.ClearDatabaseAsync();
+            ctx.Status("Database Cleared.");
+            await Task.Delay(1000);
+        });
+
+    AnsiConsole.MarkupLine("[bold red]✔[/] All data cleared successfully!");
+    AnsiConsole.WriteLine();
 }
 
 if (serviceProvider is IAsyncDisposable disposable)
