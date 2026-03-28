@@ -7,12 +7,17 @@ namespace BoAliSina.IcdImporter.Services;
 public class IcdImportService
 {
     private readonly IIcdApiClient _apiClient;
-    private readonly IIcdGraphRepository _repository;
+    private readonly INeo4jRepository _repository;
+    private readonly ISymptomNormalizationService _normalizationService;
 
-    public IcdImportService(IIcdApiClient apiClient, IIcdGraphRepository repository)
+    public IcdImportService(
+        IIcdApiClient apiClient, 
+        INeo4jRepository repository, 
+        ISymptomNormalizationService normalizationService)
     {
         _apiClient = apiClient;
         _repository = repository;
+        _normalizationService = normalizationService;
     }
 
     public async Task ImportConceptHierarchyAsync(string rootUri, Action<double, int, int>? onProgress = null)
@@ -21,12 +26,9 @@ public class IcdImportService
         var queue = new Queue<string>();
         queue.Enqueue(rootUri);
 
-        while (queue.Count > 0)
-        {
-            var currentBatch = new List<IcdApiConceptDto>();
-            
-            // Process in batches of 50 for API calls (to avoid overwhelming)
-            for (int i = 0; i < 50 && queue.Count > 0; i++)
+            DateTime lastProgressUpdate = DateTime.MinValue;
+
+            while (queue.Count > 0)
             {
                 var uri = queue.Dequeue();
                 if (visited.Contains(uri)) continue;
@@ -34,7 +36,7 @@ public class IcdImportService
                 var dto = await _apiClient.GetConceptAsync(uri);
                 if (dto != null)
                 {
-                    currentBatch.Add(dto);
+                    await ProcessConceptAsync(dto);
                     visited.Add(uri);
 
                     if (dto.Child != null)
@@ -45,33 +47,72 @@ public class IcdImportService
                         }
                     }
                 }
+
+                if (DateTime.UtcNow - lastProgressUpdate > TimeSpan.FromMilliseconds(200))
+                {
+                    double progress = visited.Count / (double)(visited.Count + queue.Count) * 100;
+                    onProgress?.Invoke(progress, visited.Count, queue.Count);
+                    lastProgressUpdate = DateTime.UtcNow;
+                }
             }
 
-            if (currentBatch.Any())
-            {
-                await SaveBatchToGraphAsync(currentBatch);
-                double progress = (double)visited.Count / (visited.Count + queue.Count) * 100;
-                onProgress?.Invoke(progress, visited.Count, queue.Count);
-            }
-        }
+            // Final progress update
+            onProgress?.Invoke(100, visited.Count, 0);
     }
 
-    private async Task SaveBatchToGraphAsync(List<IcdApiConceptDto> batch)
+    private async Task ProcessConceptAsync(IcdApiConceptDto dto)
     {
-        var nodes = batch.Select(dto => new IcdConceptNode(
-            Uri: dto.Id,
-            Code: dto.Code,
+        // 1. Prepare Disease Node
+        var disease = new DiseaseNode(
+            Id: dto.Id,
+            IcdCode: dto.Code,
             Title: dto.Title.Value,
-            Definition: dto.Definition?.Value,
-            ClassKind: dto.ClassKind,
-            Language: dto.Title.Language
-        ));
+            Description: dto.Definition?.Value
+        );
 
-        var rels = batch
-            .Where(dto => dto.Parent != null)
-            .SelectMany(dto => dto.Parent!.Select(p => new IcdRelationship(dto.Id, p)));
+        // 2. Prepare Symptom Nodes
+        var symptomCandidates = ExtractSymptomCandidates(dto);
+        var symptoms = new List<SymptomNode>();
+        foreach (var candidate in symptomCandidates)
+        {
+            var normalizedName = _normalizationService.Normalize(candidate);
+            if (string.IsNullOrWhiteSpace(normalizedName)) continue;
 
-        await _repository.MergeConceptsBatchAsync(nodes);
-        await _repository.MergeRelationshipsBatchAsync(rels);
+            symptoms.Add(new SymptomNode(
+                NormalizedName: normalizedName,
+                DisplayName: candidate
+            ));
+        }
+
+        // 3. Batch Merge in a single transaction
+        await _repository.MergeDiseaseWithSymptomsAsync(disease, symptoms);
+    }
+
+    private IEnumerable<string> ExtractSymptomCandidates(IcdApiConceptDto dto)
+    {
+        var candidates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        // Extract from Synonyms
+        if (dto.Synonym != null)
+        {
+            foreach (var s in dto.Synonym)
+            {
+                candidates.Add(s.Label.Value);
+            }
+        }
+
+        // Extract from Inclusion
+        if (dto.Inclusion != null)
+        {
+            foreach (var i in dto.Inclusion)
+            {
+                candidates.Add(i.Label.Value);
+            }
+        }
+
+        // Potential logic for parsing Definition for keywords could go here
+        // For now, synonyms and inclusions are the best sources of related clinical terms
+
+        return candidates;
     }
 }

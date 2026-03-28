@@ -15,7 +15,8 @@ const string clientId = "463e892c-5c6e-479d-93bf-e7f0ad95b951_53e535aa-9234-4264
 const string clientSecret = "ammUHSP6fyOTh8QGCAPeSBbqrNVyiaZbUND1Fmc1lpc=";
 
 services.AddHttpClient<IIcdApiClient, IcdApiClient>(client => new IcdApiClient(client, clientId, clientSecret));
-services.AddSingleton<IIcdGraphRepository>(new Neo4jIcdRepository(neo4jUri, neo4jUser, neo4jPass));
+services.AddSingleton<INeo4jRepository>(new Neo4jRepository(neo4jUri, neo4jUser, neo4jPass));
+services.AddSingleton<ISymptomNormalizationService, SymptomNormalizationService>();
 services.AddScoped<IcdImportService>();
 
 var serviceProvider = services.BuildServiceProvider();
@@ -28,7 +29,7 @@ AnsiConsole.Write(
         .Color(Color.Purple));
 
 AnsiConsole.Write(
-    new Panel(Align.Center(new Markup("[bold white]WHO ICD-11 to Neo4j Importer[/]\n[grey]Version 1.0.0[/]")))
+    new Panel(Align.Center(new Markup("[bold white]Medical Knowledge Graph Importer & Search[/]\n[grey]Graph-Based System (ICD-11 + Neo4j)[/]")))
         .Expand()
         .BorderColor(Color.Grey));
 
@@ -40,21 +41,21 @@ while (!exit)
             .Title("[yellow]What would you like to do?[/]")
             .PageSize(10)
             .AddChoices(new[] {
-                "Run Full Import",
-                "Add Sample Side Effects",
-                "Clear All Data [red](Destructive)[/]",
+                "Run Graph Ingestion (WHO ICD)",
+                "Search Diseases by Symptoms",
+                "Clear Graph Data [red](Destructive)[/]",
                 "Exit"
             }));
 
     switch (choice)
     {
-        case "Run Full Import":
+        case "Run Graph Ingestion (WHO ICD)":
             await RunImportAsync(serviceProvider, rootIcdUri);
             break;
-        case "Add Sample Side Effects":
-            await AddSampleDataAsync(serviceProvider, rootIcdUri);
+        case "Search Diseases by Symptoms":
+            await RunSearchAsync(serviceProvider);
             break;
-        case "Clear All Data [red](Destructive)[/]":
+        case "Clear Graph Data [red](Destructive)[/]":
             await ClearDatabaseAsync(serviceProvider);
             break;
         case "Exit":
@@ -66,11 +67,11 @@ while (!exit)
 static async Task RunImportAsync(IServiceProvider sp, string rootUri)
 {
     await AnsiConsole.Status()
-        .StartAsync("Connecting to Database...", async ctx => 
+        .StartAsync("Initializing Graph Schema...", async ctx => 
         {
-            var repository = sp.GetRequiredService<IIcdGraphRepository>();
+            var repository = sp.GetRequiredService<INeo4jRepository>();
             await repository.CreateConstraintsAsync();
-            ctx.Status("Database Ready.");
+            ctx.Status("Schema Constraints Applied.");
             await Task.Delay(1000);
         });
 
@@ -87,64 +88,82 @@ static async Task RunImportAsync(IServiceProvider sp, string rootUri)
         })
         .StartAsync(async ctx => 
         {
-            var task = ctx.AddTask("[green]Importing ICD Hierarchy[/]");
+            var task = ctx.AddTask("[green]Ingesting Medical Knowledge...[/]");
             
             await importer.ImportConceptHierarchyAsync(rootUri, (progress, total, queue) => 
             {
                 task.Value = progress;
-                task.Description = $"[green]Importing:[/] {total} concepts (Queue: {queue})";
+                task.Description = $"[green]Processed:[/] {total} diseases/symptoms (Queue: {queue})";
             });
 
             task.Value = 100;
             task.StopTask();
         });
 
-    AnsiConsole.MarkupLine("[bold green]✔[/] Import completed successfully!");
+    AnsiConsole.MarkupLine("[bold green]✔[/] Ingestion completed successfully!");
     AnsiConsole.WriteLine();
 }
 
-static async Task AddSampleDataAsync(IServiceProvider sp, string rootUri)
+static async Task RunSearchAsync(IServiceProvider sp)
 {
-    await AnsiConsole.Status()
-        .StartAsync("Adding Sample Data...", async ctx => 
+    var input = AnsiConsole.Ask<string>("[yellow]Enter symptoms (comma-separated):[/]");
+    var normalizationService = sp.GetRequiredService<ISymptomNormalizationService>();
+    var repository = sp.GetRequiredService<INeo4jRepository>();
+
+    var rawSymptoms = input.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+    var normalizedSymptoms = rawSymptoms.Select(normalizationService.Normalize).Where(s => !string.IsNullOrEmpty(s)).ToList();
+
+    if (!normalizedSymptoms.Any())
+    {
+        AnsiConsole.MarkupLine("[red]No valid symptoms entered.[/]");
+        return;
+    }
+
+    AnsiConsole.MarkupLine($"[grey]Searching for:[/] {string.Join(", ", normalizedSymptoms)}...");
+
+    var results = await repository.SearchDiseasesBySymptomsAsync(normalizedSymptoms);
+
+    if (!results.Any())
+    {
+        AnsiConsole.MarkupLine("[orange1]No matching diseases found for these symptoms.[/]");
+    }
+    else
+    {
+        var table = new Table();
+        table.AddColumn("[bold blue]Disease[/]");
+        table.AddColumn("[bold cyan]ICD Code[/]");
+        table.AddColumn("[bold green]Match Score[/]");
+
+        foreach (var res in results)
         {
-            var repository = sp.GetRequiredService<IIcdGraphRepository>();
-            
-            var sideEffects = new[] { 
-                new SideEffectNode("Fever", "Elevated body temperature"),
-                new SideEffectNode("Cough", "A sudden, forceful expulsion of air from the lungs")
-            };
-            await repository.MergeSideEffectsBatchAsync(sideEffects);
+            table.AddRow(res.Title, res.IcdCode, $"{res.Score:P1}");
+        }
 
-            var links = new[] {
-                new SideEffectRelationship(rootUri, "Fever")
-            };
-            await repository.LinkSideEffectsBatchAsync(links);
-
-            ctx.Status("Sample Data Added.");
-            await Task.Delay(1000);
-        });
-
-    AnsiConsole.MarkupLine("[bold blue]i[/] Side Effect demo data added.");
+        AnsiConsole.Write(table);
+    }
+    
+    AnsiConsole.WriteLine();
+    AnsiConsole.MarkupLine("[grey]Press Enter to continue...[/]");
+    Console.ReadLine();
 }
 
 static async Task ClearDatabaseAsync(IServiceProvider sp)
 {
-    if (!AnsiConsole.Confirm("[red]Are you sure you want to delete ALL data from the database?[/]", false))
+    if (!AnsiConsole.Confirm("[red]Are you sure you want to delete ALL graph data?[/]", false))
     {
         return;
     }
 
     await AnsiConsole.Status()
-        .StartAsync("Clearing Database...", async ctx => 
+        .StartAsync("Clearing Graph Data...", async ctx => 
         {
-            var repository = sp.GetRequiredService<IIcdGraphRepository>();
+            var repository = sp.GetRequiredService<INeo4jRepository>();
             await repository.ClearDatabaseAsync();
-            ctx.Status("Database Cleared.");
+            ctx.Status("Graph Cleared.");
             await Task.Delay(1000);
         });
 
-    AnsiConsole.MarkupLine("[bold red]✔[/] All data cleared successfully!");
+    AnsiConsole.MarkupLine("[bold red]✔[/] All graph data cleared successfully!");
     AnsiConsole.WriteLine();
 }
 
